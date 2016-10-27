@@ -3,7 +3,7 @@ NewsDigest splash For iOS
 
 A simple replication of Yahoo! News Digest's splash animation.
 
-![](https://github.com/ZakariyyaSv/ZSNewsDigestSplash.git/raw/master/demo.gif)
+![](https://github.com/ZakariyyaSv/ZSNewsDigestSplash/raw/master/demo.gif)
 
 ## Installation
 
