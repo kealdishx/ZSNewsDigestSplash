@@ -18,15 +18,19 @@
 #define colorYellow RGB(254,209,48)
 #define colorBlue RGB(34,199,252)
 
+static int count = 0;
 static const CGFloat preAnimDuration = 0.3f;
 static const CGFloat circleRadius = 30;
 static const CGFloat dotRadius = 6;
-static const CGFloat duration = 2.4f;
+static CGFloat dotCircleDuration = 1.5;
+static const CGFloat lineDuration = 2.0f;
+static const CGFloat delayInterval = 0.2f;
 static const int dotCount = 6;
 static const CGFloat lineLength = 20;
 static NSString *const dotCircleAnimName = @"dotCircleAnimName";
 static NSString *const bounceAnimName = @"bounceAnimName";
 static NSString *const circleMaskAnimName = @"circleMaskAnimaName";
+static NSString *const lineAnimationName = @"lineAnimationName";
 static NSString *const animKey = @"animKey";
 
 @interface ZSSplashManager()<CAAnimationDelegate>
@@ -49,7 +53,9 @@ static NSString *const animKey = @"animKey";
 
 @property (nonatomic,strong) CABasicAnimation *circleMaskAnimation;
 
-@property (nonatomic,weak) completion completionBlock;
+@property (nonatomic,assign) CFAbsoluteTime startTime;
+
+@property (nonatomic,strong) completion completionBlock;
 
 @end
 
@@ -65,29 +71,25 @@ static NSString *const animKey = @"animKey";
     return _sharedInstance;
 }
 
-+ (void)startAnimationWithCompletion:(completion)completionBlock{
-    [[self sharedInstance] startAnimationWithCompletion:completionBlock];
++ (void)startAnimation{
+    [[self sharedInstance] startAnimation];
+}
+
++ (void)stopAnimationWithCompletion:(completion)completion{
+    [[self sharedInstance] stopAnimationWithCompletion:completion];
+}
+
++ (void)setDotCircleDuration:(CFTimeInterval)duration{
+    dotCircleDuration = duration;
 }
 
 #pragma mark - private method
-- (UIBezierPath *)activityPathWithStartAngle:(CGFloat)startAngle{
-    
-    UIBezierPath *path = [UIBezierPath bezierPath];
-    [path addArcWithCenter:self.center radius:circleRadius startAngle:startAngle endAngle: startAngle - 1.5 * M_PI / 3.0 clockwise:NO];
-    CGFloat lineAngle = startAngle - M_PI_2;
-    [path addLineToPoint:CGPointMake(self.center.x + (lineLength + circleRadius) * cos(lineAngle), self.center.y + (lineLength + circleRadius) * sin(lineAngle))];
-    [path addLineToPoint:self.center];
-    return path;
-}
-
-- (void)startAnimationWithCompletion:(completion)completionBlock{
+- (void)startAnimation{
     if (_isAnimating) {
         return;
     }
     _isAnimating = YES;
-    if (completionBlock) {
-        self.completionBlock = completionBlock;
-    }
+    
     [self createDotLayers];
     [UIView animateWithDuration:preAnimDuration animations:^{
         self.baseView.alpha = 1;
@@ -96,18 +98,55 @@ static NSString *const animKey = @"animKey";
             for (ZSDotLayer *dotLayer in self.dotLayerArr) {
                 [self addDotCircleAnimationTodotLayer:dotLayer];
             }
+            self.startTime = CFAbsoluteTimeGetCurrent();
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 
                 [[NSRunLoop mainRunLoop] addTimer:self.colorTimer forMode:NSRunLoopCommonModes];
             });
-            
         }
     }];
     
 }
 
+- (void)stopAnimationWithCompletion:(completion)completion{
+    if (!_isAnimating) {
+        return;
+    }
+    
+    // stop timer
+    [self.colorTimer invalidate];
+    self.colorTimer = nil;
+    count = 0;
+    
+    for (ZSDotLayer *dotLayer in self.dotLayerArr) {
+        [dotLayer removeAllAnimations];
+    }
+    
+    CFTimeInterval interval = CFAbsoluteTimeGetCurrent() - self.startTime;
+    CGFloat endAngle = 1.0 * interval / dotCircleDuration * 2.0 * M_PI;
+    for (ZSDotLayer *dotLayer in self.dotLayerArr) {
+        int dotTag = [dotLayer.name intValue];
+        CGFloat angle = (dotTag + 2) * M_PI / 3.0;
+        CGPoint startPoint = CGPointMake(self.center.x + circleRadius * cos(endAngle - angle), self.center.y + circleRadius * sin(endAngle - angle));
+        dotLayer.position = startPoint;
+        CAKeyframeAnimation *linePositionAnimation = [CAKeyframeAnimation animationWithKeyPath:@"position"];
+        linePositionAnimation.path = [self linePositionPathWithStartPoint:startPoint angle:endAngle - angle].CGPath;
+        linePositionAnimation.duration = lineDuration;
+        linePositionAnimation.beginTime = CACurrentMediaTime() + delayInterval;
+        linePositionAnimation.fillMode = kCAFillModeBoth;
+        linePositionAnimation.removedOnCompletion = NO;
+        linePositionAnimation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        linePositionAnimation.delegate = self;
+        [linePositionAnimation setValue:lineAnimationName forKey:animKey];
+        [dotLayer addAnimation:linePositionAnimation forKey:lineAnimationName];
+    }
+    
+    if (completion) {
+        self.completionBlock = completion;
+    }
+}
+
 - (void)changeDotLayerColor{
-    static int count = 0;
     count++;
     for (ZSDotLayer *layer in self.dotLayerArr) {
         int tag = [layer.name intValue];
@@ -115,11 +154,6 @@ static NSString *const animKey = @"animKey";
         if (tag == dotCount - 1) {
             self.topDotColor = layer.fillColor;
         }
-    }
-    if (count == 8) {
-        [self.colorTimer invalidate];
-        self.colorTimer = nil;
-        count = 0;
     }
 }
 
@@ -173,13 +207,27 @@ static NSString *const animKey = @"animKey";
     int tag = [dotlayer.name intValue];
     CAKeyframeAnimation *dotCircleAnimation = [CAKeyframeAnimation animationWithKeyPath:@"position"];
     dotCircleAnimation.path = [self activityPathWithStartAngle: tag * M_PI / 3.0].CGPath;
-    dotCircleAnimation.delegate = self;
-    dotCircleAnimation.duration = duration;
+    dotCircleAnimation.duration = dotCircleDuration;
+    dotCircleAnimation.repeatCount = HUGE_VALF;
     dotCircleAnimation.removedOnCompletion = NO;
     dotCircleAnimation.fillMode = kCAFillModeForwards;
-    dotCircleAnimation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    dotCircleAnimation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
     [dotCircleAnimation setValue:dotCircleAnimName forKey:animKey];
-    [dotlayer addAnimation:dotCircleAnimation forKey:@"dotCircleAnimation"];
+    [dotlayer addAnimation:dotCircleAnimation forKey:dotCircleAnimName];
+}
+
+- (UIBezierPath *)activityPathWithStartAngle:(CGFloat)startAngle{
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    [path addArcWithCenter:self.center radius:circleRadius startAngle:startAngle endAngle: startAngle - 2.0 * M_PI  clockwise:NO];
+    return path;
+}
+
+- (UIBezierPath *)linePositionPathWithStartPoint:(CGPoint)startPoint angle:(CGFloat)angle{
+    UIBezierPath *path = [UIBezierPath bezierPath];
+    [path moveToPoint:startPoint];
+    [path addLineToPoint:CGPointMake(self.center.x + (lineLength + circleRadius) * cos(angle), self.center.y + (lineLength + circleRadius) * sin(angle))];
+    [path addLineToPoint:self.center];
+    return path;
 }
 
 - (void)removeDotLayers{
@@ -233,8 +281,8 @@ static NSString *const animKey = @"animKey";
 #pragma mark - CAAnimationDelegate
 - (void)animationDidStop:(CAAnimation *)anim finished:(BOOL)flag{
     NSString *value = [anim valueForKey:animKey];
-    if ([value isEqualToString:dotCircleAnimName]) {
-
+    if ([value isEqualToString:lineAnimationName]) {
+        
         [self removeDotLayers];
     }
     else if ([value isEqualToString:bounceAnimName]) {

@@ -23,7 +23,11 @@
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event{
     
-    [ZSSplashManager startAnimationWithCompletion:nil];
+    [ZSSplashManager startAnimation];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [ZSSplashManager stopAnimationWithCompletion:nil];
+    });
 }
 
 

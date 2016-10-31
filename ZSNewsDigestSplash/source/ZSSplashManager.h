@@ -12,6 +12,13 @@ typedef void (^completion)();
 
 @interface ZSSplashManager : NSObject
 
-+ (void)startAnimationWithCompletion:(completion)completionBlock;
+// set interval of dot circle animation cycle, default is 1.5s.
++ (void)setDotCircleDuration:(CFTimeInterval)duration;
+
+// begin circle animation
++ (void)startAnimation;
+
+// end circle animation and remove animation view.
++ (void)stopAnimationWithCompletion:(completion)completion;
 
 @end
