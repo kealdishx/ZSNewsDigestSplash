@@ -24,7 +24,7 @@ static const CGFloat circleRadius = 30;
 static const CGFloat dotRadius = 6;
 static CGFloat dotCircleDuration = 1.5;
 static const CGFloat lineDuration = 2.0f;
-static const CGFloat delayInterval = 0.2f;
+static const CGFloat delayInterval = 0.15f;
 static const int dotCount = 6;
 static const CGFloat lineLength = 20;
 static NSString *const dotCircleAnimName = @"dotCircleAnimName";
@@ -45,7 +45,7 @@ static NSString *const animKey = @"animKey";
 
 @property (nonatomic,strong) ZSDotLayer *centerCircleLayer;
 
-@property (nonatomic,strong) NSTimer *colorTimer;
+@property (nonatomic,strong) dispatch_source_t colourTimer;
 
 @property (nonatomic,assign) CGColorRef topDotColor;
 
@@ -99,10 +99,7 @@ static NSString *const animKey = @"animKey";
                 [self addDotCircleAnimationTodotLayer:dotLayer];
             }
             self.startTime = CFAbsoluteTimeGetCurrent();
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                
-                [[NSRunLoop mainRunLoop] addTimer:self.colorTimer forMode:NSRunLoopCommonModes];
-            });
+            dispatch_resume(self.colourTimer);
         }
     }];
     
@@ -114,8 +111,8 @@ static NSString *const animKey = @"animKey";
     }
     
     // stop timer
-    [self.colorTimer invalidate];
-    self.colorTimer = nil;
+    dispatch_source_cancel(self.colourTimer);
+    self.colourTimer = nil;
     count = 0;
     
     for (ZSDotLayer *dotLayer in self.dotLayerArr) {
@@ -351,13 +348,19 @@ static NSString *const animKey = @"animKey";
     return _centerCircleLayer;
 }
 
-- (NSTimer *)colorTimer{
-    if (!_colorTimer) {
-        _colorTimer = [NSTimer timerWithTimeInterval:0.1f target:self selector:@selector(changeDotLayerColor) userInfo:nil repeats:YES];
+- (dispatch_source_t)colourTimer{
+    if (!_colourTimer) {
+        _colourTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+        if (_colourTimer) {
+            dispatch_source_set_timer(_colourTimer, dispatch_walltime(NULL, 0), 0.1 * NSEC_PER_SEC, 0.001);
+            dispatch_source_set_event_handler(_colourTimer, ^{
+               dispatch_async(dispatch_get_main_queue(), ^{
+                   [self changeDotLayerColor];
+               });
+            });
+        }
     }
-    return _colorTimer;
+    return _colourTimer;
 }
-
-
 
 @end
