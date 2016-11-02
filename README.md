@@ -21,8 +21,11 @@ You can create code simply like this:
 [ZSSplashManager startAnimation];
 
 [ZSSplashManager stopAnimationWithCompletion:nil];
-
 ```
+
+## Author
+
+zakariyyaSv(zakariyyaSv@gmail.com)
 
 ## License
 
